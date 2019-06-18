@@ -52,9 +52,8 @@ namespace Testing
             auto path = GetTestHelperHost();
             AssertEx::IsFalse( path.empty() );
 
-
             // Give process some time to initialize
-            AssertEx::NtSuccess( hooker.process.CreateAndAttach( path ) );
+            hooker.process.CreateAndAttach( path );
             Sleep( 100 );
 
             // Remote helper function
@@ -86,7 +85,7 @@ namespace Testing
             AssertEx::IsFalse( path.empty() );
 
             // Give process some time to initialize
-            AssertEx::NtSuccess( hooker.process.CreateAndAttach( path ) );
+            hooker.process.CreateAndAttach( path );
             Sleep( 100 );
 
             // Get function

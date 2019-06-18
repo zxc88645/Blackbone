@@ -1,5 +1,6 @@
 #include "Threads.h"
 #include "../ProcessCore.h"
+#include "../../Include/Exception.h"
 #include "../../DriverControl/DriverControl.h"
 
 #include <memory>
@@ -14,10 +15,6 @@ ProcessThreads::ProcessThreads( ProcessCore& core )
 {
 }
 
-ProcessThreads::~ProcessThreads()
-{
-}
-
 /// <summary>
 /// Create the thread.
 /// </summary>
@@ -25,7 +22,7 @@ ProcessThreads::~ProcessThreads()
 /// <param name="arg">Thread argument.</param>
 /// <param name="flags">Thread creation flags</param>
 /// <returns>New thread object</returns>
-call_result_t<ThreadPtr> ProcessThreads::CreateNew( ptr_t threadProc, ptr_t arg, enum CreateThreadFlags flags /*= NoThreadFlags*/ )
+ThreadPtr ProcessThreads::CreateNew( ptr_t threadProc, ptr_t arg, enum CreateThreadFlags flags /*= NoThreadFlags*/ )
 {
     HANDLE hThd = NULL;
     auto status = _core.native()->CreateRemoteThreadT( hThd, threadProc, arg, flags, THREAD_ALL_ACCESS );
@@ -41,7 +38,7 @@ call_result_t<ThreadPtr> ProcessThreads::CreateNew( ptr_t threadProc, ptr_t arg,
     }
 
     if (!NT_SUCCESS( status ))
-        return status;
+        THROW_WITH_STATUS_AND_LOG( status, "Failed to create thread" );
 
     return std::make_shared<Thread>( hThd, &_core );
 }
@@ -82,7 +79,10 @@ ThreadPtr ProcessThreads::getMain() const
 {
     uint64_t mintime = MAXULONG64_2;
     auto threads = getAll();
-    ThreadPtr result = !threads.empty() ? threads.front() : nullptr;
+    if (threads.empty())
+        THROW_AND_LOG( "Could not find any threads" );
+
+    ThreadPtr result = threads.front();
 
     for (const auto& thread : threads)
     {
@@ -105,7 +105,10 @@ ThreadPtr ProcessThreads::getLeastExecuted() const
 {
     uint64_t mintime = MAXULONG64_2;
     auto threads = getAll();
-    ThreadPtr result = !threads.empty() ? threads.front() : nullptr;
+    if (threads.empty())
+        THROW_AND_LOG( "Could not find any threads" );
+
+    ThreadPtr result = threads.front();
 
     for (const auto& thread : threads)
     {
@@ -128,7 +131,10 @@ ThreadPtr ProcessThreads::getMostExecuted() const
 {
     uint64_t maxtime = 0;
     auto threads = getAll();
-    ThreadPtr result = !threads.empty() ? threads.front() : nullptr;
+    if (threads.empty())
+        THROW_AND_LOG( "Could not find any threads" );
+
+    ThreadPtr result = threads.front();
 
     for (const auto& thread : threads)
     {
@@ -154,7 +160,7 @@ ThreadPtr ProcessThreads::getRandom() const
 {
     auto threads = getAll();
     if (threads.empty())
-        return nullptr;
+        THROW_AND_LOG( "Could not find any threads" );
 
     static std::random_device rd;
     std::uniform_int_distribution<size_t> dist( 0, threads.size() - 1 );
@@ -171,8 +177,10 @@ ThreadPtr ProcessThreads::get( DWORD id ) const
 {
     auto threads = getAll();
     auto iter = std::find_if( threads.begin(), threads.end(), [id]( const auto& thread ) { return thread->id() == id; } );
+    if (iter == threads.end())
+        THROW_AND_LOG( "No thread with id 0x%x", id );
 
-    return iter != threads.end() ? *iter : nullptr;
+    return *iter;
 }
 
 }

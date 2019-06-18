@@ -134,7 +134,7 @@ public:
                 return _ctx.R9;
 
             default:
-                return _memory.Read<DWORD64>( _ctx.Rsp + 0x28 + (index - 4) * _wordSize ).result( 0 );
+                return _memory.Read<DWORD64>( _ctx.Rsp + 0x28 + (index - 4) * _wordSize );
             }
         }
         else
@@ -205,10 +205,11 @@ public:
             offset = FIELD_OFFSET( _TEB32, LastErrorValue );
         }
 
+        DWORD code = 0xFFFFFFFF;
         if (pteb)
-            return _memory.Read<DWORD>( pteb + offset ).result( 0xFFFFFFFF );
+            _memory.Read( pteb + offset, code );
 
-        return 0xFFFFFFFF;
+        return code;
     }
 
     /// <summary>
@@ -248,7 +249,7 @@ public:
         if (!pteb)
             return 0;
             
-        return _memory.Read<ptr_t>( pteb + FIELD_OFFSET( _NT_TIB_T<DWORD64>, ArbitraryUserPointer ) ).result( 0 );
+        return _memory.Read<ptr_t>( pteb + FIELD_OFFSET( _NT_TIB_T<DWORD64>, ArbitraryUserPointer ) );
     }
 
     /// <summary>

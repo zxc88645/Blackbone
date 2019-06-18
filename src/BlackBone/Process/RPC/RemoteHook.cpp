@@ -103,7 +103,7 @@ NTSTATUS RemoteHook::ApplyP( eHookType type, uint64_t ptr, fnCallback newFn, con
     HookData data = { { 0 } };
 
     // Store old byte
-    data.oldByte = _memory.Read<uint8_t>( ptr ).result();
+    data.oldByte = _memory.Read<uint8_t>( ptr );
     data.type = type;
     data.onExecute.freeFn = newFn;
     data.onExecute.classFn.classPtr = pClass;

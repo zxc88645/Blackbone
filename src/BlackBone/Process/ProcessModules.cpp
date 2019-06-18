@@ -2,6 +2,7 @@
 #include "ProcessModules.h"
 #include "Process.h"
 #include "RPC/RemoteExec.h"
+#include "../Include/Exception.h"
 #include "../Misc/NameResolve.h"
 #include "../Misc/Utils.h"
 #include "../Symbols/SymbolData.h"
@@ -411,17 +412,15 @@ call_result_t<ModuleDataPtr> ProcessModules::Inject( const std::wstring& path, T
 
     // Image path
     auto modName = _memory.Allocate( 0x1000, PAGE_READWRITE );
-    if (!modName)
-        return modName.status;
 
     // Write dll name into target process
     auto fillDllName = [&modName, &path]( auto& ustr )
     {
-        ustr.Buffer = modName->ptr<std::decay_t<decltype(ustr)>::type>() + sizeof( ustr );
+        ustr.Buffer = modName.ptr<std::decay_t<decltype(ustr)>::type>() + sizeof( ustr );
         ustr.MaximumLength = ustr.Length = static_cast<USHORT>(path.size() * sizeof( wchar_t ));
 
-        modName->Write( 0, ustr );
-        modName->Write( sizeof( ustr ), path.size() * sizeof( wchar_t ), path.c_str() );
+        modName.Write( 0, ustr );
+        modName.Write( sizeof( ustr ), path.size() * sizeof( wchar_t ), path.c_str() );
 
         return static_cast<uint32_t>(sizeof( ustr ));
     };
@@ -474,7 +473,7 @@ call_result_t<ModuleDataPtr> ProcessModules::Inject( const std::wstring& path, T
 
     auto a = AsmFactory::GetAssembler( img.mType() );
 
-    a->GenCall( pLdrLoadDll->procAddress, { 0, 0, modName->ptr(), modName->ptr() + 0x800 } );
+    a->GenCall( pLdrLoadDll->procAddress, { 0, 0, modName.ptr(), modName.ptr() + 0x800 } );
     (*a)->ret();
 
     _proc.remote().CreateRPCEnvironment( Worker_None, true );
@@ -483,28 +482,21 @@ call_result_t<ModuleDataPtr> ProcessModules::Inject( const std::wstring& path, T
     if (pThread != nullptr)
     {
         if (pThread == _proc.remote().getWorker())
-            status = _proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), res );
+            res = _proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
         else
-            status = _proc.remote().ExecInAnyThread( (*a)->make(), (*a)->getCodeSize(), res, pThread );
+            res = _proc.remote().ExecInAnyThread( (*a)->make(), (*a)->getCodeSize(), pThread );
 
-        if (NT_SUCCESS( status ))
-            status = static_cast<NTSTATUS>(res);
+        status = static_cast<NTSTATUS>(res);
     }
     else
-    {
-        status = _proc.remote().ExecInNewThread( (*a)->make(), (*a)->getCodeSize(), res, switchMode );
-        if (NT_SUCCESS( status ))
-            status = static_cast<NTSTATUS>(res);
-    }
+         _proc.remote().ExecInNewThread( (*a)->make(), (*a)->getCodeSize() );
 
     // Retry with LoadLibrary if possible
     if (!NT_SUCCESS(status) && pLoadLibrary && sameArch)
     {
-        auto result = _proc.remote().ExecDirect( pLoadLibrary->procAddress, modName->ptr() + ustrSize );
+        auto result = _proc.remote().ExecDirect( pLoadLibrary->procAddress, modName.ptr() + ustrSize );
         if (result == 0)
-        {
             return status;
-        }
     }
 
     return GetModule( path, LdrList, img.mType() );
@@ -531,13 +523,12 @@ NTSTATUS ProcessModules::Unload( const ModuleDataPtr& hMod )
     if (_proc.core().isWow64() && hMod->type == mt_mod64)
         threadSwitch = ForceSwitch;
 
-    uint64_t res = 0;
     auto a = AsmFactory::GetAssembler( hMod->type );
 
     a->GenCall( pUnload->procAddress, { hMod->baseAddress } );
     (*a)->ret();
 
-    _proc.remote().ExecInNewThread( (*a)->make(), (*a)->getCodeSize(), res, threadSwitch );
+    _proc.remote().ExecInNewThread( (*a)->make(), (*a)->getCodeSize(), threadSwitch );
 
     // Remove module from cache
     _modules.erase( std::make_pair( hMod->name, hMod->type ) );
@@ -663,14 +654,17 @@ bool ProcessModules::InjectPureIL(
     tmp.erase( idx );
     std::wstring ClassName = tmp;
 
-    auto mem = _memory.Allocate( 0x10000 );
-    if (!mem)
+    MemBlock address;
+    try
+    {
+        address = _memory.Allocate( 0x10000 );
+    }
+    catch (const nt_exception&)
     {
         returnCode = 7;
         return false;
     }
 
-    auto address = std::move( mem.result() );
     uintptr_t offset = 4;
     uintptr_t address_VersionString, address_netAssemblyDll, address_netAssemblyClass,
            address_netAssemblyMethod, address_netAssemblyArgs;

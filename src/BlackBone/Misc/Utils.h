@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Config.h"
 #include "../Include/Winheaders.h"
 #include <string>
 #include <vector>
@@ -89,6 +90,7 @@ public:
     /// <param name="code">The code.</param>
     /// <returns>Error message</returns>
     BLACKBONE_API static std::wstring GetErrorDescription( NTSTATUS code );
+    BLACKBONE_API static std::string GetErrorDescriptionA( NTSTATUS code );
 
     /// <summary>
     /// Check if file exists

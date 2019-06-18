@@ -87,8 +87,7 @@ namespace Testing
 
         TEST_METHOD( Remote )
         {
-            Process proc;
-            AssertEx::NtSuccess( proc.Attach( GetCurrentProcessId() ) );
+            Process proc( GetCurrentProcessId() );
 
             const float newVal = 25.0f;
 

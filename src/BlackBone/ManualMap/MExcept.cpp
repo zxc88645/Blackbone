@@ -216,13 +216,7 @@ NTSTATUS MExcept::CreateVEH( Process& proc, ModuleData& mod, bool partial )
     {
         // Add module to module table
         if (!_pModTable.valid())
-        {
-            auto mem = proc.memory().Allocate( 0x1000, PAGE_READWRITE, 0, false );
-            if (!mem)
-                return mem.status;
-
-            _pModTable = std::move( mem.result() );
-        }
+            _pModTable = proc.memory().Allocate( 0x1000, PAGE_READWRITE, 0, false );
 
         ModuleTable table;
         _pModTable.Read ( 0, table );
@@ -240,11 +234,7 @@ NTSTATUS MExcept::CreateVEH( Process& proc, ModuleData& mod, bool partial )
         return STATUS_SUCCESS;
 
     // VEH codecave
-    auto mem = proc.memory().Allocate( 0x2000, PAGE_EXECUTE_READWRITE, 0, false );
-    if (!mem)
-        return mem.status;
-
-    _pVEHCode = std::move( mem.result() );
+    _pVEHCode = proc.memory().Allocate( 0x2000, PAGE_EXECUTE_READWRITE, 0, false );
 
     BLACKBONE_TRACE( "ManualMap: Vectored hander: 0x%p", _pVEHCode.ptr() );
 
@@ -308,17 +298,14 @@ NTSTATUS MExcept::CreateVEH( Process& proc, ModuleData& mod, bool partial )
     proc.remote().AddReturnWithEvent( *a, mod.type );
     a->GenEpilogue();
 
-    NTSTATUS status = proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
+    result = proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
     if (result != 0)
     {
         _hVEH = result;
         return STATUS_SUCCESS;
     }
-    else
-    {
-        status = proc.remote().GetLastStatus();
-        return status;
-    }
+
+    return proc.remote().GetLastStatus();
 }
 
 /// <summary>
@@ -331,8 +318,6 @@ NTSTATUS MExcept::CreateVEH( Process& proc, ModuleData& mod, bool partial )
 NTSTATUS MExcept::RemoveVEH( Process& proc, bool partial, eModType mt )
 {  
     auto a = AsmFactory::GetAssembler( mt );
-    uint64_t result = 0;
-
     auto& mods = proc.modules();
     auto pRemoveHandler = mods.GetNtdllExport( "RtlRemoveVectoredExceptionHandler", mt );
     if (!pRemoveHandler)
@@ -349,11 +334,10 @@ NTSTATUS MExcept::RemoveVEH( Process& proc, bool partial, eModType mt )
     // Destroy table and handler
     if (!partial)
     {
-        proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
+        proc.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
+        _pModTable.Free();
         _pVEHCode.Free();
         _hVEH = 0;
-
-        _pModTable.Free();
     }        
 
     return STATUS_SUCCESS;

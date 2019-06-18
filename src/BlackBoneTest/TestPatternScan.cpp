@@ -7,7 +7,7 @@ namespace Testing
     public:
         TEST_METHOD_INITIALIZE( ClassInitialize )
         {
-            AssertEx::NtSuccess( _proc.Attach( L"explorer.exe" ) );
+            _proc.Attach( L"explorer.exe" );
         }
 
         // Scan all allocated process memory

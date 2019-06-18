@@ -165,6 +165,28 @@ std::wstring Utils::ToLower( std::wstring str )
     return str;
 }
 
+template<typename T, auto Formatter>
+std::basic_string<T> GetErrorDescriptionT( NTSTATUS code )
+{
+    std::basic_string<T> result;
+    T* lpMsgBuf = nullptr;
+
+    if (Formatter(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_FROM_HMODULE |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        GetModuleHandleW( L"ntdll.dll" ),
+        code, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
+        (T*)&lpMsgBuf, 0, NULL ) != 0)
+    {
+        result = lpMsgBuf;
+        LocalFree( lpMsgBuf );
+    }
+
+    return result;
+}
+
 /// <summary>
 /// Get system error description
 /// </summary>
@@ -172,24 +194,17 @@ std::wstring Utils::ToLower( std::wstring str )
 /// <returns>Error message</returns>
 std::wstring Utils::GetErrorDescription( NTSTATUS code )
 {
-    LPWSTR lpMsgBuf = nullptr;
+    return GetErrorDescriptionT<wchar_t, FormatMessageW>( code );
+}
 
-    if (FormatMessageW(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER |
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_FROM_HMODULE |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        GetModuleHandleW( L"ntdll.dll" ),
-        code, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
-        (LPWSTR)&lpMsgBuf, 0, NULL ) != 0)
-    {
-        std::wstring ret( lpMsgBuf );
-
-        LocalFree( lpMsgBuf );
-        return ret;
-    }
-
-    return L"";
+/// <summary>
+/// Get system error description
+/// </summary>
+/// <param name="code">The code.</param>
+/// <returns>Error message</returns>
+std::string Utils::GetErrorDescriptionA( NTSTATUS code )
+{
+    return GetErrorDescriptionT<char, FormatMessageA>( code );
 }
 
 /// <summary>

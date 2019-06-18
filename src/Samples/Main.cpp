@@ -4,6 +4,8 @@
 #include <BlackBone/Syscalls/Syscall.h>
 #include <iostream>
 
+#include <BlackBone/Misc/StackTrace.h>
+
 using namespace blackbone;
 
 void MapCalcFromFile();
@@ -11,6 +13,16 @@ void MapCmdFromMem();
 
 int main( int /*argc*/, char* /*argv[]*/ )
 {
+    try
+    {
+        auto self = Process::CreateNew( L"C:\\werwe.exe" );
+        auto handles = self.EnumHandles();
+    }
+    catch (const std::exception&)
+    {
+        //std::cout << e.what();
+    }
+
     // List all process PIDs matching name
     auto pids = Process::EnumByName( L"explorer.exe" );
 
@@ -21,8 +33,9 @@ int main( int /*argc*/, char* /*argv[]*/ )
     auto all = Process::EnumByNameOrPID( 0, L"" );
 
     // Attach to a process
-    if (Process explorer; !pids.empty() && NT_SUCCESS( explorer.Attach( pids.front() ) ))
+    try
     {
+        Process explorer( pids.front() );
         auto& core = explorer.core();
 
         // Get bitness info about this and target processes
@@ -37,15 +50,17 @@ int main( int /*argc*/, char* /*argv[]*/ )
         [[maybe_unused]] auto peb_ptr = core.peb( &peb );
 
         // Get all process handles
-        if (auto handles = explorer.EnumHandles(); handles)
+        if (auto handles = explorer.EnumHandles(); true)
         {
             // do stuff with handles...
         }
     }
+    catch (const std::exception&)
+    {
+    }
 
     // Start new suspended process and attach immediately
-    Process notepad; 
-    notepad.CreateAndAttach( L"C:\\windows\\system32\\notepad.exe", true );
+    auto notepad = Process::CreateNew( L"C:\\windows\\system32\\notepad.exe", true );
     {
         // do stuff...
         notepad.Resume();
@@ -94,7 +109,7 @@ int main( int /*argc*/, char* /*argv[]*/ )
         memory.Read( mainMod->baseAddress, sizeof( dosHeader ), &dosHeader );
 
         // Method 3
-        auto[status, dosHeader2] = memory.Read<IMAGE_DOS_HEADER>( mainMod->baseAddress );
+        auto dosHeader2 = memory.Read<IMAGE_DOS_HEADER>( mainMod->baseAddress );
 
         // Change memory protection
         if (NT_SUCCESS( memory.Protect( mainMod->baseAddress, sizeof( dosHeader ), PAGE_READWRITE ) ))
@@ -111,13 +126,18 @@ int main( int /*argc*/, char* /*argv[]*/ )
         }
 
         // Allocate memory
-        if (auto[status2, block] = memory.Allocate( 0x1000, PAGE_EXECUTE_READWRITE ); NT_SUCCESS( status2 ))
+        try
         {
+            auto block = memory.Allocate( 0x1000, PAGE_EXECUTE_READWRITE );
+
             // Write into memory block
-            block->Write( 0x10, 12.0 );
+            block.Write( 0x10, 12.0 );
 
             // Read from memory block
-            [[maybe_unused]] auto dval = block->Read<double>( 0x10, 0.0 );
+            [[maybe_unused]] auto dval = block.Read<double>( 0x10, 0.0 );
+        } 
+        catch (const std::exception&)
+        {
         }
 
         // Enumerate regions
@@ -181,9 +201,8 @@ int main( int /*argc*/, char* /*argv[]*/ )
             a.GenPrologue();
             a.GenCall( static_cast<uintptr_t>(GetModuleHandleWPtr->procAddress), { nullptr }, cc_stdcall );
             a.GenEpilogue();
-
-            uint64_t result = 0;
-            remote.ExecInNewThread( a->make(), a->getCodeSize(), result );
+         
+            remote.ExecInNewThread( a->make(), a->getCodeSize() );
         }
 
         // Execute in main thread
@@ -196,19 +215,18 @@ int main( int /*argc*/, char* /*argv[]*/ )
             a.GenCall( static_cast<uintptr_t>(GetModuleHandleWPtr->procAddress), { nullptr }, cc_stdcall );
             a.GenEpilogue();
 
-            uint64_t result = 0;
-            remote.ExecInAnyThread( a->make(), a->getCodeSize(), result, mainThread );
+            remote.ExecInAnyThread( a->make(), a->getCodeSize(), mainThread );
         }
     }
 
     // Pattern scanning
-    if (Process process; NT_SUCCESS( process.Attach( GetCurrentProcessId() ) ))
+    /*if (Process process; NT_SUCCESS( process.Attach( GetCurrentProcessId() ) ))
     {
         PatternSearch ps{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 };
 
         std::vector<ptr_t> results;
         ps.SearchRemoteWhole( process, false, 0, results );
-    }
+    }*/
 
     // Remote function calls
     {

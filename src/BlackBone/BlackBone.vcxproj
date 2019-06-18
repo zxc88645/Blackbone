@@ -784,6 +784,7 @@ xcopy "$(ProjectDir)..\..\DIA\$(Platform)\symsrv.dll" "$(TargetDir)" /Y</Command
     <None Include="Exports.def" />
     <ClInclude Include="Include\ApiSet.h" />
     <ClInclude Include="Include\CallResult.h" />
+    <ClInclude Include="Include\Exception.h" />
     <ClInclude Include="Include\FunctionTypes.h" />
     <ClInclude Include="Include\HandleGuard.h" />
     <ClInclude Include="Include\Macro.h" />
@@ -809,6 +810,7 @@ xcopy "$(ProjectDir)..\..\DIA\$(Platform)\symsrv.dll" "$(TargetDir)" /Y</Command
     <ClInclude Include="Misc\DynImport.h" />
     <ClInclude Include="Misc\InitOnce.h" />
     <ClInclude Include="Misc\NameResolve.h" />
+    <ClInclude Include="Misc\StackTrace.h" />
     <ClInclude Include="Misc\Thunk.hpp" />
     <ClInclude Include="Misc\Trace.hpp" />
     <ClInclude Include="Misc\Utils.h" />

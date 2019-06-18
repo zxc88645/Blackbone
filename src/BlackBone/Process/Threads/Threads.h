@@ -13,7 +13,6 @@ class ProcessThreads
 {
 public:
     BLACKBONE_API ProcessThreads( class ProcessCore& core );
-    BLACKBONE_API ~ProcessThreads();
 
     ProcessThreads( const ProcessThreads& ) = delete;
     ProcessThreads& operator =( const ProcessThreads& ) = delete;
@@ -25,7 +24,7 @@ public:
     /// <param name="arg">Thread argument.</param>
     /// <param name="flags">Thread creation flags</param>
     /// <returns>New thread object</returns>
-    BLACKBONE_API call_result_t<ThreadPtr> CreateNew(
+    BLACKBONE_API ThreadPtr CreateNew(
         ptr_t threadProc,
         ptr_t arg,
         enum CreateThreadFlags flags = static_cast<CreateThreadFlags>(0)

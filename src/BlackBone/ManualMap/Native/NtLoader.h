@@ -82,8 +82,8 @@ public:
     /// <param name="noThread">Don't create new threads during unlink</param>
     /// <returns>true on success</returns>
     BLACKBONE_API bool Unlink( const ModuleData& mod, bool noThread = false );
-private:
 
+private:
     /// <summary>
     /// Find LdrpHashTable[] variable
     /// </summary>
@@ -174,7 +174,7 @@ private:
     /// <param name="size">Module type</param>
     /// <param name="size">Size to allocate</param>
     /// <returns>Allocated address</returns>
-    call_result_t<ptr_t> AllocateInHeap( eModType mt, size_t size );
+    ptr_t AllocateInHeap( eModType mt, size_t size );
 
     /// <summary>
     /// Get module native node ptr or create new

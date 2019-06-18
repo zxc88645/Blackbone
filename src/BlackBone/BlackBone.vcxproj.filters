@@ -487,6 +487,12 @@
     <ClInclude Include="Syscalls\Syscall.h">
       <Filter>Syscalls</Filter>
     </ClInclude>
+    <ClInclude Include="Include\Exception.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="Misc\StackTrace.h">
+      <Filter>Misc</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Syscalls\Syscall64.asm">

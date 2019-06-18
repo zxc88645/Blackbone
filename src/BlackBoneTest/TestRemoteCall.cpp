@@ -99,8 +99,7 @@ namespace Testing
 
         TEST_METHOD( LocalCall )
         {
-            Process process;
-            AssertEx::NtSuccess( process.Attach( GetCurrentProcessId() ) );
+            Process process( GetCurrentProcessId() );
             auto pFN = MakeRemoteFunction<decltype(&TestFn)>( process, &TestFn );
             double d = 0.0;
 
@@ -125,8 +124,7 @@ namespace Testing
             AssertEx::IsTrue( Utils::FileExists( path ) );
 
             // Give process some time to initialize
-            Process process;
-            AssertEx::NtSuccess( process.CreateAndAttach( path ) );
+            auto process = Process::CreateNew( path );
             Sleep( 100 );
 
             auto hMainMod = process.modules().GetMainModule();
@@ -160,8 +158,7 @@ namespace Testing
             AssertEx::IsTrue( Utils::FileExists( path ) );
 
             // Give process some time to initialize
-            Process process;
-            AssertEx::NtSuccess( process.CreateAndAttach( path ) );
+            auto process = Process::CreateNew( path );
             Sleep( 100 );
 
             auto CreateFileWPtr = process.modules().GetExport( L"kernel32.dll", "CreateFileW" );

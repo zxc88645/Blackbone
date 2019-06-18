@@ -16,28 +16,20 @@ RemoteLocalHook::~RemoteLocalHook()
     Restore();
 }
 
-NTSTATUS RemoteLocalHook::AllocateMem( ptr_t /*address*/, size_t codeSize )
+void RemoteLocalHook::AllocateMem( ptr_t /*address*/, size_t codeSize )
 {
     auto pagesize = _process.core().native()->pageSize();
     auto size = Align( codeSize, pagesize ) + Align( sizeof( _ctx ), pagesize );
 
-    auto allocation = _process.memory().Allocate( size, PAGE_EXECUTE_READWRITE );
-    if (!allocation)
-        return allocation.status;
-
-    _hookData   = std::move( allocation.result() );
+    _hookData   = _process.memory().Allocate( size, PAGE_EXECUTE_READWRITE );
     _pHookCode  = _hookData.ptr();
     _pThunkCode = _pHookCode + _hookData.size() - pagesize;
-
-    return allocation.status;
 }
 
 NTSTATUS RemoteLocalHook::SetHook( ptr_t address, asmjit::Assembler& hook )
 {
     _address = address;
-    NTSTATUS status = AllocateMem( address, hook.getCodeSize() );
-    if (!NT_SUCCESS( status ))
-        return status;
+    AllocateMem( address, hook.getCodeSize() );
 
     return _process.core().isWow64() ? SetHook32( address, hook ) : SetHook64( address, hook );
 }

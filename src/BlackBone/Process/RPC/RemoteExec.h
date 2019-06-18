@@ -51,33 +51,26 @@ public:
     /// </summary>
     /// <param name="pCode">Code to execute</param>
     /// <param name="size">Code size</param>
-    /// <param name="callResult">Code return value</param>
     /// <param name="modeSwitch">Switch wow64 thread to long mode upon creation</param>
-    /// <returns>Status</returns>
-    BLACKBONE_API NTSTATUS ExecInNewThread(
-        PVOID pCode, size_t size, 
-        uint64_t& callResult, 
-        eThreadModeSwitch modeSwitch = AutoSwitch 
-        );
+    /// <returns>Return code</returns>
+    BLACKBONE_API uint64_t ExecInNewThread( PVOID pCode, size_t size, eThreadModeSwitch modeSwitch = AutoSwitch );
 
     /// <summary>
     /// Execute code in context of our worker thread
     /// </summary>
     /// <param name="pCode">Cde to execute</param>
     /// <param name="size">Code size.</param>
-    /// <param name="callResult">Execution result</param>
-    /// <returns>Status</returns>
-    BLACKBONE_API NTSTATUS ExecInWorkerThread( PVOID pCode, size_t size, uint64_t& callResult );
+    /// <returns>Call result</returns>
+    BLACKBONE_API uint64_t ExecInWorkerThread( PVOID pCode, size_t size );
 
     /// <summary>
     /// Execute code in context of any existing thread
     /// </summary>
     /// <param name="pCode">Cde to execute</param>
     /// <param name="size">Code size.</param>
-    /// <param name="callResult">Execution result</param>
     /// <param name="thd">Target thread</param>
-    /// <returns>Status</returns>
-    BLACKBONE_API NTSTATUS ExecInAnyThread( PVOID pCode, size_t size, uint64_t& callResult, ThreadPtr& thread );
+    /// <returns>Call result</returns>
+    BLACKBONE_API uint64_t ExecInAnyThread( PVOID pCode, size_t size, ThreadPtr& thread );
 
     /// <summary>
     /// Create new thread with specified entry point and argument
@@ -190,7 +183,7 @@ private:
     /// Create worker RPC thread
     /// </summary>
     /// <returns>Thread ID</returns>
-    call_result_t<DWORD> CreateWorkerThread();
+    DWORD CreateWorkerThread();
 
     /// <summary>
     /// Create event to synchronize APC procedures
@@ -204,8 +197,7 @@ private:
     /// </summary>
     /// <param name="pCode">Code to copy</param>
     /// <param name="size">Code size</param>
-    /// <returns>Status</returns>
-    NTSTATUS CopyCode( PVOID pCode, size_t size );
+    void CopyCode( PVOID pCode, size_t size );
 
     RemoteExec( const RemoteExec& ) = delete;
     RemoteExec& operator =(const RemoteExec&) = delete;

@@ -20,20 +20,16 @@ namespace blackbone
 inline DWORD CastProtection( DWORD prot, bool bDEP )
 {
     if (bDEP == true)
-    {
         return prot;
-    }
-    else
-    {
-        if (prot == PAGE_EXECUTE_READ)
-            return PAGE_READONLY;
-        else if (prot == PAGE_EXECUTE_READWRITE)
-            return PAGE_READWRITE;
-        else if (prot == PAGE_EXECUTE_WRITECOPY)
-            return PAGE_WRITECOPY;
-        else
-            return prot;
-    }
+
+    if( prot == PAGE_EXECUTE_READ )
+        return PAGE_READONLY;
+    else if (prot == PAGE_EXECUTE_READWRITE)
+        return PAGE_READWRITE;
+    else if (prot == PAGE_EXECUTE_WRITECOPY)
+        return PAGE_WRITECOPY;
+
+    return prot;
 }
 
 class MemBlock
@@ -124,8 +120,8 @@ public:
     /// <param name="desired">Desired base address of new block</param>
     /// <param name="protection">Win32 Memory protection flags</param>
     /// <param name="own">false if caller will be responsible for block deallocation</param>
-    /// <returns>Memory block. If failed - returned block will be invalid</returns>
-    BLACKBONE_API static call_result_t<MemBlock> Allocate(
+    /// <returns>Memory block/returns>
+    BLACKBONE_API static MemBlock Allocate(
         class ProcessMemory& process,
         size_t size,
         ptr_t desired = 0,
@@ -140,7 +136,7 @@ public:
     /// <param name="desired">Desired base address of new block</param>
     /// <param name="protection">Memory protection</param>
     /// <returns>New block address</returns>
-    BLACKBONE_API call_result_t<ptr_t> Realloc( size_t size, ptr_t desired = 0, DWORD protection = PAGE_EXECUTE_READWRITE );
+    BLACKBONE_API ptr_t Realloc( size_t size, ptr_t desired = 0, DWORD protection = PAGE_EXECUTE_READWRITE );
 
     /// <summary>
     /// Change memory protection
@@ -226,37 +222,42 @@ public:
     /// <summary>
     /// Memory will not be deallocated upon object destruction
     /// </summary>
-    BLACKBONE_API inline void Release() { if (_pImpl) _pImpl->_own = false; }
+    BLACKBONE_API void Release() 
+    { 
+        if (_pImpl)
+            _pImpl->_own = false;
+    }
 
     /// <summary>
     /// Get memory pointer
     /// </summary>
     /// <returns>Memory pointer</returns>
     template<typename T = ptr_t>
-    inline T ptr() const { return _pImpl ? (T)_pImpl->_ptr : T( 0 ); }
+    T ptr() const { return _pImpl ? T(_pImpl->_ptr) : T( 0 ); }
 
     /// <summary>
     /// Get block size
     /// </summary>
     /// <returns>Block size</returns>
-    BLACKBONE_API inline size_t size() const { return _pImpl ? _pImpl->_size : 0; }
+    BLACKBONE_API size_t size() const { return _pImpl ? _pImpl->_size : 0; }
 
     /// <summary>
     /// Get block memory protection
     /// </summary>
     /// <returns>Memory protection flags</returns>
-    BLACKBONE_API inline DWORD  protection() const { return _pImpl ? _pImpl->_protection : 0; }
+    BLACKBONE_API DWORD  protection() const { return _pImpl ? _pImpl->_protection : 0; }
 
     /// <summary>
     /// Validate memory block
     /// <returns>true if memory pointer isn't 0</returns>
-    BLACKBONE_API inline bool valid() const { return( _pImpl.get() != nullptr && _pImpl->_ptr != 0); }
+    BLACKBONE_API bool valid() const { return( _pImpl.get() != nullptr && _pImpl->_ptr != 0); }
+    BLACKBONE_API explicit operator bool() const { return valid(); }
 
     /// <summary>
     /// Get memory pointer
     /// </summary>
     /// <returns>Memory pointer</returns>
-    BLACKBONE_API inline operator ptr_t() const  { return _pImpl ? _pImpl->_ptr : 0; }
+    BLACKBONE_API operator ptr_t() const  { return _pImpl ? _pImpl->_ptr : 0; }
 
 private:
     std::shared_ptr<MemBlockImpl> _pImpl;

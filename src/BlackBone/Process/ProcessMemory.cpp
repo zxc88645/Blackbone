@@ -1,6 +1,6 @@
 #include "ProcessMemory.h"
 #include "Process.h"
-#include "../Misc/Trace.hpp"
+#include "../Include/Exception.h"
 
 namespace blackbone
 {
@@ -12,10 +12,6 @@ ProcessMemory::ProcessMemory( Process* process )
 {
 }
 
-ProcessMemory::~ProcessMemory()
-{
-}
-
 /// <summary>
 /// Allocate new memory block
 /// </summary>
@@ -23,8 +19,8 @@ ProcessMemory::~ProcessMemory()
 /// <param name="protection">Memory protection</param>
 /// <param name="desired">Desired base address of new block</param>
 /// <param name="own">false if caller will be responsible for block deallocation</param>
-/// <returns>Memory block. If failed - returned block will be invalid</returns>
-call_result_t<MemBlock> ProcessMemory::Allocate( size_t size, DWORD protection /*= PAGE_EXECUTE_READWRITE*/, ptr_t desired /*= 0*/, bool own /*= true*/ )
+/// <returns>Memory block</returns>
+MemBlock ProcessMemory::Allocate( size_t size, DWORD protection /*= PAGE_EXECUTE_READWRITE*/, ptr_t desired /*= 0*/, bool own /*= true*/ )
 {
     return MemBlock::Allocate( *this, size, desired, protection, own );
 }
@@ -144,15 +140,16 @@ NTSTATUS ProcessMemory::Read( ptr_t dwAddress, size_t dwSize, PVOID pResult, boo
 NTSTATUS ProcessMemory::Read( const std::vector<ptr_t>& adrList, size_t dwSize, PVOID pResult, bool handleHoles /*= false */ )
 {
     if (adrList.empty())
-        return STATUS_INVALID_PARAMETER;
-    if(adrList.size() == 1)
+        THROW_AND_LOG( "Address list is empty" );
+
+    if (adrList.size() == 1)
         return Read( adrList.front(), dwSize, pResult, handleHoles );
 
     bool wow64 = _process->barrier().targetWow64;
-    ptr_t ptr = wow64 ? Read<uint32_t>( adrList[0] ).result( 0 ) : Read<ptr_t>( adrList[0] ).result( 0 );
+    ptr_t ptr = wow64 ? Read<uint32_t>( adrList[0] ): Read<ptr_t>( adrList[0] );
 
     for (size_t i = 1; i < adrList.size() - 1; i++)
-        ptr = wow64 ? Read<uint32_t>( ptr + adrList[i] ).result( 0 ) : Read<ptr_t>( ptr + adrList[i] ).result( 0 );
+        ptr = wow64 ? Read<uint32_t>( ptr + adrList[i] ) : Read<ptr_t>( ptr + adrList[i] );
 
     return Read( ptr + adrList.back(), dwSize, pResult, handleHoles );
 }
@@ -180,14 +177,15 @@ NTSTATUS ProcessMemory::Write( const std::vector<ptr_t>& adrList, size_t dwSize,
 {
     if (adrList.empty())
         return STATUS_INVALID_PARAMETER;
+
     if (adrList.size() == 1)
         return Write( adrList.front(), dwSize, pData );
 
     bool wow64 = _process->barrier().targetWow64;
-    ptr_t ptr = wow64 ? Read<uint32_t>( adrList[0] ).result( 0 ) : Read<ptr_t>( adrList[0] ).result( 0 );
+    ptr_t ptr = wow64 ? Read<uint32_t>( adrList[0] ): Read<ptr_t>( adrList[0] );
 
     for (size_t i = 1; i < adrList.size() - 1; i++)
-        ptr = wow64 ? Read<uint32_t>( ptr + adrList[i] ).result( 0 ) : Read<ptr_t>( ptr + adrList[i] ).result( 0 );
+        ptr = wow64 ? Read<uint32_t>( ptr + adrList[i] ) : Read<ptr_t>( ptr + adrList[i] );
 
     return Write( ptr + adrList.back(), dwSize, pData );
 }

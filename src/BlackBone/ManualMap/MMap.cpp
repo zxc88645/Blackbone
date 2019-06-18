@@ -1,5 +1,6 @@
 #include "MMap.h"
 #include "../Process/Process.h"
+#include "../Include/Exception.h"
 #include "../Misc/NameResolve.h"
 #include "../Misc/Utils.h"
 #include "../Misc/DynImport.h"
@@ -42,7 +43,15 @@ call_result_t<ModuleDataPtr> MMap::MapImage(
     CustomArgs_t* pCustomArgs /*= nullptr*/
     )
 {
-    return MapImageInternal( path, nullptr, 0, false, flags, mapCallback, context, pCustomArgs );
+    try
+    {
+        return MapImageInternal( path, nullptr, 0, false, flags, mapCallback, context, pCustomArgs );
+    }
+    catch (const std::exception&)
+    {
+        Cleanup();
+        throw;
+    }
 }
 
 /// <summary>
@@ -68,7 +77,15 @@ call_result_t<ModuleDataPtr> MMap::MapImage(
     wchar_t path[64];
     wsprintfW( path, L"MemoryImage_0x%p", buffer );
 
-    return MapImageInternal( path, buffer, size, asImage, flags, mapCallback, context, pCustomArgs );
+    try
+    {
+        return MapImageInternal( path, buffer, size, asImage, flags, mapCallback, context, pCustomArgs );
+    }
+    catch (const std::exception&)
+    {
+        Cleanup();
+        throw;
+    }
 }
 
 /// <summary>
@@ -82,7 +99,7 @@ call_result_t<ModuleDataPtr> MMap::MapImage(
 /// <param name="mapCallback">Mapping callback. Triggers for each mapped module</param>
 /// <param name="context">User-supplied callback context</param>
 /// <returns>Mapped image info</returns>
-call_result_t<ModuleDataPtr> MMap::MapImageInternal(
+ModuleDataPtr MMap::MapImageInternal(
     const std::wstring& path,
     void* buffer, size_t size,
     bool asImage /*= false*/,
@@ -101,12 +118,7 @@ call_result_t<ModuleDataPtr> MMap::MapImageInternal(
 
     // Prepare target process
     auto mode = (flags & NoThreads) ? Worker_UseExisting : Worker_CreateNew;
-    auto status = _process.remote().CreateRPCEnvironment( mode, true );
-    if (!NT_SUCCESS( status ))
-    {
-        Cleanup();
-        return status;
-    }
+    _process.remote().CreateRPCEnvironment( mode, true );
 
     // No need to support exceptions if DEP is disabled
     if (_process.core().DEP() == false)
@@ -124,11 +136,6 @@ call_result_t<ModuleDataPtr> MMap::MapImageInternal(
 
     // Map module and all dependencies
     auto mod = FindOrMapModule( path, buffer, size, asImage, flags );
-    if (!mod)
-    {
-        Cleanup();
-        return mod.status;
-    }
 
     // Change process base module address if needed
     if (flags & RebaseProcess && !_images.empty() && _images.rbegin()->get()->peImage.isExe())
@@ -199,14 +206,7 @@ call_result_t<ModuleDataPtr> MMap::MapImageInternal(
 
             // Don't run initializer for pure IL dlls
             if (!img->peImage.pureIL() || img->peImage.isExe())
-                status = RunModuleInitializers( img, DLL_PROCESS_ATTACH, pCustomArgs ).status;
-
-            if (!NT_SUCCESS( status ))
-            {
-                BLACKBONE_TRACE( L"ManualMap: ModuleInitializers failed for '%ls', status: 0x%X", img->ldrEntry.name.c_str(), status );
-                Cleanup();
-                return status;
-            }
+                RunModuleInitializers( img, DLL_PROCESS_ATTACH, pCustomArgs );
 
             // Wipe header
             if (img->flags & WipeHeader)
@@ -225,7 +225,7 @@ call_result_t<ModuleDataPtr> MMap::MapImageInternal(
     }
 
     //Cleanup();
-    return mod;
+    return mod.result();
 }
 
 /// <summary>
@@ -244,7 +244,7 @@ void MMap::FixManagedPath( ptr_t base, const std::wstring &path )
         // Get PEB loader entry
         for (auto head = ldr.InLoadOrderModuleList.Flink;
             head != fieldPtr( peb.Ldr, &_PEB_LDR_DATA2_T<T>::InLoadOrderModuleList );
-            head = _process.memory().Read<T>( head ).result( 0 ))
+            head = _process.memory().Read<T>( head ))
         {
             _LDR_DATA_TABLE_ENTRY_BASE_T<T> localdata = { { 0 } };
 
@@ -363,17 +363,7 @@ call_result_t<ModuleDataPtr> MMap::FindOrMapModule(
 
     // Allocate normally if something went wrong
     if (!pImage->imgMem.valid())
-    {
-        auto mem = _process.memory().Allocate( pImage->peImage.imageSize(), PAGE_EXECUTE_READWRITE, pImage->peImage.imageBase() );
-        if (!mem)
-        {
-            BLACKBONE_TRACE( L"ManualMap: Failed to allocate memory for image, status 0x%X", status );
-            pImage->peImage.Release();
-            return mem.status;
-        }
-
-        pImage->imgMem = std::move( mem.result() );
-    }
+        pImage->imgMem = _process.memory().Allocate( pImage->peImage.imageSize(), PAGE_EXECUTE_READWRITE, pImage->peImage.imageBase() );
 
     ldrEntry.baseAddress = pImage->imgMem.ptr();
     ldrEntry.size = pImage->peImage.imageSize();
@@ -860,6 +850,9 @@ NTSTATUS MMap::ResolveImport( ImageContextPtr pImage, bool useDelayed /*= false 
     {
         std::wstring wstrDll = importMod.first;
 
+        if (_wcsicmp( wstrDll.c_str(), L"C:\\WINDOWS\\SysWOW64\\user32.dll" ) == 0)
+            DebugBreak();
+
         // Load dependency if needed
         auto hMod = FindOrMapDependency( pImage, wstrDll );
         if (!hMod)
@@ -867,7 +860,7 @@ NTSTATUS MMap::ResolveImport( ImageContextPtr pImage, bool useDelayed /*= false 
             BLACKBONE_TRACE( L"ManualMap: Failed to load dependency '%ls'. Status 0x%x", wstrDll.c_str(), hMod.status );
             return hMod.status;
         }
-
+        
         for (auto& importFn : importMod.second)
         {
             call_result_t<exportData> expData;
@@ -986,7 +979,6 @@ NTSTATUS MMap::EnableExceptions( ImageContextPtr pImage )
             if (expTableRVA)
             {
                 auto a = AsmFactory::GetAssembler( pImage->ldrEntry.type );
-                uint64_t result = 0;
 
                 pImage->pExpTableAddr = expTableRVA + pImage->imgMem.ptr<ptr_t>();
                 auto pAddTable = _process.modules().GetNtdllExport( "RtlAddFunctionTable", pImage->ldrEntry.type );
@@ -1004,13 +996,11 @@ NTSTATUS MMap::EnableExceptions( ImageContextPtr pImage )
                 _process.remote().AddReturnWithEvent( *a, pImage->ldrEntry.type );
                 a->GenEpilogue();
 
-                auto status = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
-                if (!NT_SUCCESS( status ))
-                    return status;
+                _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
             }
+
             // No exception table
-            else
-                return STATUS_NOT_FOUND;
+            return STATUS_NOT_FOUND;
         }
     }
     else if (!success)
@@ -1039,7 +1029,6 @@ NTSTATUS MMap::DisableExceptions( ImageContextPtr pImage )
             return STATUS_NOT_FOUND;
 
         auto a = AsmFactory::GetAssembler( pImage->ldrEntry.type );
-        uint64_t result = 0;
 
         auto pRemoveTable = _process.modules().GetNtdllExport( "RtlDeleteFunctionTable", pImage->ldrEntry.type );
         if (!pRemoveTable)
@@ -1051,9 +1040,7 @@ NTSTATUS MMap::DisableExceptions( ImageContextPtr pImage )
         _process.remote().AddReturnWithEvent( *a );
         a->GenEpilogue();
 
-        auto status = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
-        if (!NT_SUCCESS( status ))
-            return status;
+        _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
     }
 
     partial = (pImage->flags & PartialExcept) != 0;
@@ -1151,10 +1138,9 @@ NTSTATUS MMap::InitializeCookie( ImageContextPtr pImage )
 /// DLL_THREAD_DETTACH
 /// </param>
 /// <returns>DllMain result</returns>
-call_result_t<uint64_t> MMap::RunModuleInitializers( ImageContextPtr pImage, DWORD dwReason, CustomArgs_t* pCustomArgs /*= nullptr*/ )
+uint64_t MMap::RunModuleInitializers( ImageContextPtr pImage, DWORD dwReason, CustomArgs_t* pCustomArgs /*= nullptr*/ )
 {
     auto a = AsmFactory::GetAssembler( pImage->ldrEntry.type );
-    uint64_t result = 0;
 
     auto hNtdll = _process.modules().GetModule( L"ntdll.dll", LdrList, pImage->peImage.mType() );
     auto pActivateActx = _process.modules().GetExport( hNtdll, "RtlActivateActivationContext" );
@@ -1175,12 +1161,9 @@ call_result_t<uint64_t> MMap::RunModuleInitializers( ImageContextPtr pImage, DWO
     if (pCustomArgs)
     {
         auto memBuf = _process.memory().Allocate( pCustomArgs->size() + sizeof( uint64_t ), PAGE_EXECUTE_READWRITE, 0, false );
-        if (!memBuf)
-            return memBuf.status;
-
-        memBuf->Write( 0, pCustomArgs->size() );
-        memBuf->Write( sizeof( uint64_t ), pCustomArgs->size(), pCustomArgs->data() );
-        customArgumentsAddress = memBuf->ptr();
+        memBuf.Write( 0, pCustomArgs->size() );
+        memBuf.Write( sizeof( uint64_t ), pCustomArgs->size(), pCustomArgs->data() );
+        customArgumentsAddress = memBuf.ptr();
     }
 
     // Function order
@@ -1219,12 +1202,9 @@ call_result_t<uint64_t> MMap::RunModuleInitializers( ImageContextPtr pImage, DWO
     _process.remote().AddReturnWithEvent( *a, pImage->ldrEntry.type, rt_int32, ARGS_OFFSET );
     a->GenEpilogue();
 
-    NTSTATUS status = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
-    if (!NT_SUCCESS( status ))
-        return status;
-
+    uint64_t result = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
     if (pImage->ldrEntry.entryPoint == 0)
-        return call_result_t<uint64_t>( ERROR_SUCCESS, STATUS_SUCCESS );
+        return ERROR_SUCCESS;
     
     BLACKBONE_TRACE( L"ManualMap: DllMain of '%ls' returned %lld", pImage->ldrEntry.name.c_str(), result );
     return result;
@@ -1247,11 +1227,7 @@ NTSTATUS MMap::CreateActx( const pe::PEImage& image  )
     NTSTATUS status = STATUS_SUCCESS;
     uint64_t result = 0;
 
-    auto mem = _process.memory().Allocate( 512, PAGE_READWRITE );
-    if (!mem)
-        return mem.status;
-
-    _pAContext = std::move( mem.result() );
+    _pAContext = _process.memory().Allocate( 512, PAGE_READWRITE );
     
     bool switchMode = image.mType() == mt_mod64 && _process.core().isWow64();
     auto kernel32 = _process.modules().GetModule( L"kernel32.dll" );
@@ -1308,12 +1284,9 @@ NTSTATUS MMap::CreateActx( const pe::PEImage& image  )
         );
 
         auto pCode = _process.memory().Allocate( 0x1000 );
-        if (!pCode)
-            return pCode.status;
+        pCode.Write( 0, (*a)->getCodeSize(), (*a)->make() );
 
-        pCode->Write( 0, (*a)->getCodeSize(), (*a)->make() );
-
-        result = _process.remote().ExecDirect( pCode->ptr<ptr_t>(), _pAContext.ptr<size_t>() + sizeof( ptr_t ) );
+        result = _process.remote().ExecDirect( pCode.ptr(), _pAContext.ptr<size_t>() + sizeof( ptr_t ) );
     }
     // Native way
     else
@@ -1357,9 +1330,7 @@ NTSTATUS MMap::CreateActx( const pe::PEImage& image  )
         _process.remote().AddReturnWithEvent( *a, image.mType() );
         a->GenEpilogue();
 
-        status = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize(), result );
-        if (!NT_SUCCESS( status ))
-            return status;
+        result = _process.remote().ExecInWorkerThread( (*a)->make(), (*a)->getCodeSize() );
     }
 
 
@@ -1368,8 +1339,7 @@ NTSTATUS MMap::CreateActx( const pe::PEImage& image  )
         _pAContext.Free();
 
         status = _process.remote().GetLastStatus();
-        BLACKBONE_TRACE( L"ManualMap: Failed to create activation context for image '%ls'. Status: 0x%x", image.manifestFile().c_str(), status );
-        return status;
+        THROW_WITH_STATUS_AND_LOG( status, "ManualMap: Failed to create activation context for image '%ws'", image.manifestFile().c_str() );
     }
 
     return STATUS_SUCCESS;
@@ -1404,11 +1374,9 @@ NTSTATUS MMap::ProbeRemoteSxS( std::wstring& path )
 
     // REmote buffer
     auto memBuf = _process.memory().Allocate( memSize, PAGE_READWRITE );
-    if (!memBuf)
-        return memBuf.status;
 
     // Fill Unicode strings
-    auto memPtr = memBuf->ptr();
+    auto memPtr = memBuf.ptr();
     auto fillStr = [&]( auto&& OriginalName )
     {
         std::remove_reference_t<decltype(OriginalName)> DllName1 = { 0 };
@@ -1471,16 +1439,12 @@ NTSTATUS MMap::ProbeRemoteSxS( std::wstring& path )
     _process.remote().AddReturnWithEvent( a, mt_default, rt_int32, ARGS_OFFSET );
     a.GenEpilogue();
 
-    uint64_t result = 0;
-    if (!NT_SUCCESS( status = _process.remote().ExecInWorkerThread( a->make(), a->getCodeSize(), result ) ))
-        return status;
-
-    status = static_cast<NTSTATUS>(result);
+    status = static_cast<NTSTATUS>(_process.remote().ExecInWorkerThread( a->make(), a->getCodeSize() ));
     if (NT_SUCCESS( status ))
     {
         // Read result back
         std::unique_ptr<uint8_t[]> localBuf( new uint8_t[memSize] );
-        if (NT_SUCCESS( status = memBuf->Read( 0, memSize, localBuf.get() ) ))
+        if (NT_SUCCESS( status = memBuf.Read( 0, memSize, localBuf.get() ) ))
             path = reinterpret_cast<wchar_t*>(localBuf.get() + strOffset);
     }
 

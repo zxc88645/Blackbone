@@ -2,7 +2,7 @@
 #include "ProcessMemory.h"
 #include "ProcessCore.h"
 #include "../Subsystem/NativeSubsystem.h"
-#include "../Misc/Trace.hpp"
+#include "../Include/Exception.h"
 
 namespace blackbone
 {
@@ -79,8 +79,8 @@ MemBlock::MemBlock( ProcessMemory* mem, ptr_t ptr, bool own /*= true*/ )
 /// <param name="desired">Desired base address of new block</param>
 /// <param name="protection">Memory protection</param>
 /// <param name="own">false if caller will be responsible for block deallocation</param>
-/// <returns>Memory block. If failed - returned block will be invalid</returns>
-call_result_t<MemBlock> MemBlock::Allocate( 
+/// <returns>Memory block</returns>
+MemBlock MemBlock::Allocate( 
     ProcessMemory& process, 
     size_t size, 
     ptr_t desired /*= 0*/, 
@@ -91,19 +91,21 @@ call_result_t<MemBlock> MemBlock::Allocate(
     ptr_t desired64 = desired;
     DWORD newProt = CastProtection( protection, process.core().DEP() );
     
-    NTSTATUS status = process.core().native()->VirtualAllocExT( desired64, size, MEM_RESERVE | MEM_COMMIT, newProt );
+    NTSTATUS status = process.core().native()->VirtualAllocExT( desired64, size, MEM_COMMIT, newProt );
     if (!NT_SUCCESS( status ))
     {
         desired64 = 0;
         status = process.core().native()->VirtualAllocExT( desired64, size, MEM_COMMIT, newProt );
-        if (NT_SUCCESS( status ))
-            return call_result_t<MemBlock>( MemBlock( &process, desired64, size, protection, own ), STATUS_IMAGE_NOT_AT_BASE );
-        else
-            return status;
+        if (!NT_SUCCESS( status ))
+            THROW_WITH_STATUS_AND_LOG( status, "Failed to allocate memory" );
+
+        return MemBlock( &process, desired64, size, protection, own );
     }
+
 #ifdef _DEBUG
-    BLACKBONE_TRACE(L"Allocate: Allocating at address 0x%p (0x%X bytes)", static_cast<uintptr_t>(desired64), size);
+    BLACKBONE_TRACE(L"Allocate: Allocating at address 0x%llx (0x%X bytes)", desired64, size);
 #endif
+
     return MemBlock( &process, desired64, size, protection, own );
 }
 
@@ -114,10 +116,10 @@ call_result_t<MemBlock> MemBlock::Allocate(
 /// <param name="desired">Desired base address of new block</param>
 /// <param name="protection">Memory protection</param>
 /// <returns>New block address</returns>
-call_result_t<ptr_t> MemBlock::Realloc( size_t size, ptr_t desired /*= 0*/, DWORD protection /*= PAGE_EXECUTE_READWRITE*/ )
+ptr_t MemBlock::Realloc( size_t size, ptr_t desired /*= 0*/, DWORD protection /*= PAGE_EXECUTE_READWRITE*/ )
 {
     if (!_pImpl)
-        return STATUS_MEMORY_NOT_ALLOCATED;
+        THROW_AND_LOG( "Memory not allocated" );
 
     ptr_t desired64 = desired;
     auto status = _pImpl->_memory->core().native()->VirtualAllocExT( desired64, size, MEM_COMMIT, protection );
@@ -126,9 +128,7 @@ call_result_t<ptr_t> MemBlock::Realloc( size_t size, ptr_t desired /*= 0*/, DWOR
         desired64 = 0;
         status = _pImpl->_memory->core().native()->VirtualAllocExT( desired64, size, MEM_COMMIT, protection );
         if (!NT_SUCCESS( status ))
-            return status;
-
-        status = STATUS_IMAGE_NOT_AT_BASE;
+            THROW_WITH_STATUS_AND_LOG( status, "Failed to allocate new memory address for block 0x%llx", _pImpl->_ptr );
     }
 
     // Replace current instance
@@ -141,7 +141,7 @@ call_result_t<ptr_t> MemBlock::Realloc( size_t size, ptr_t desired /*= 0*/, DWOR
         _pImpl->_protection = protection;
     }
 
-    return call_result_t<ptr_t>( desired64, status );
+    return desired64;
 }
 
 /// <summary>

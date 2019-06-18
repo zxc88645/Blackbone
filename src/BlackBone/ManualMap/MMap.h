@@ -234,13 +234,13 @@ private:
     /// <param name="mapCallback">Mapping callback. Triggers for each mapped module</param>
     /// <param name="context">User-supplied callback context</param>
     /// <returns>Mapped image info</returns>
-    call_result_t<ModuleDataPtr> MapImageInternal(
+    ModuleDataPtr MapImageInternal(
         const std::wstring& path,
         void* buffer, size_t size,
         bool asImage = false,
         eLoadFlags flags = NoFlags,
         MapCallback ldrCallback = nullptr,
-        void* ldrContext = nullptr,
+        void* context = nullptr,
         CustomArgs_t* pCustomArgs_t = nullptr
         );
  
@@ -275,7 +275,7 @@ private:
     /// DLL_THREAD_DETTACH
     /// </param>
     /// <returns>DllMain result</returns>
-    call_result_t<uint64_t> RunModuleInitializers( ImageContextPtr pImage, DWORD dwReason, CustomArgs_t* pCustomArgs_t = nullptr );
+    uint64_t RunModuleInitializers( ImageContextPtr pImage, DWORD dwReason, CustomArgs_t* pCustomArgs_t = nullptr );
 
     /// <summary>
     /// Copies image into target process

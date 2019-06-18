@@ -12,7 +12,7 @@ namespace Testing
     public:
         TEST_METHOD_INITIALIZE( ClassInitialize )
         {
-            AssertEx::NtSuccess( _proc.Attach( GetCurrentProcessId() ) );
+            _proc.Attach( GetCurrentProcessId() );
         }
 
         TEST_METHOD( PEB )
@@ -59,19 +59,25 @@ namespace Testing
 
         TEST_METHOD( InvalidHandles )
         {
-            Process proc;
-
             HANDLE hProc = OpenProcess( PROCESS_ALL_ACCESS & ~PROCESS_CREATE_THREAD, FALSE, GetCurrentProcessId() );
+            Process proc1( hProc );
 
-            AssertEx::NtSuccess( proc.Attach( hProc ) );
-            AssertEx::AreEqual( STATUS_ACCESS_DENIED, proc.threads().CreateNew( reinterpret_cast<ptr_t>(&VoidFn), 0 ).status );
-            proc.Detach();
+            try
+            {
+                auto thread = proc1.threads().CreateNew( reinterpret_cast<ptr_t>(&VoidFn), 0 );
+                AssertEx::Fail( L"Must throw" );
+            }
+            catch (const nt_exception& e)
+            {
+                AssertEx::AreEqual( STATUS_ACCESS_DENIED, e.status() );
+            }
+            
 
             hProc = OpenProcess( PROCESS_ALL_ACCESS & ~PROCESS_VM_READ, FALSE, GetCurrentProcessId() );
-            AssertEx::NtSuccess( proc.Attach( hProc ) );
+            Process proc2( hProc );
 
             PEB_T peb = { };
-            AssertEx::IsNotZero( proc.core().peb( &peb ) );
+            AssertEx::IsNotZero( proc2.core().peb( &peb ) );
             AssertEx::IsZero( peb.ImageBaseAddress );
             AssertEx::AreEqual( STATUS_ACCESS_DENIED, LastNtStatus() );
         }

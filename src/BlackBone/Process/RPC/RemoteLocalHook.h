@@ -52,17 +52,17 @@ union HookCtx
 class RemoteLocalHook
 {
 public:
-    RemoteLocalHook( class Process& process );
-    ~RemoteLocalHook();
+    BLACKBONE_API RemoteLocalHook( class Process& process );
+    BLACKBONE_API ~RemoteLocalHook();
 
-    NTSTATUS SetHook( ptr_t address, asmjit::Assembler& hook );
-    NTSTATUS Restore();
+    BLACKBONE_API NTSTATUS SetHook( ptr_t address, asmjit::Assembler& hook );
+    BLACKBONE_API NTSTATUS Restore();
 
 private:
     RemoteLocalHook( const RemoteLocalHook& ) = delete;
     RemoteLocalHook& operator = (const RemoteLocalHook&) = delete;
 
-    NTSTATUS AllocateMem( ptr_t address, size_t codeSize );
+    void AllocateMem( ptr_t address, size_t codeSize );
 
     NTSTATUS SetHook32( ptr_t address, asmjit::Assembler& hook );
 
