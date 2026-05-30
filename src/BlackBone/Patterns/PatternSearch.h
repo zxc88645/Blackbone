@@ -52,7 +52,7 @@ public:
 
     /// <summary>
     /// Full pattern match, no wildcards, with a callback handler for matches.
-    /// Uses Boyer–Moore–Horspool algorithm.
+    /// Uses Boyerâ€“Mooreâ€“Horspool algorithm.
     /// </summary>
     /// <param name="scanStart">Starting address</param>
     /// <param name="scanSize">Size of region to scan</param>
@@ -140,7 +140,7 @@ public:
 
     /// <summary>
     /// Full pattern match, no wildcards.
-    /// Uses Boyer–Moore–Horspool algorithm.
+    /// Uses Boyerâ€“Mooreâ€“Horspool algorithm.
     /// </summary>
     /// <param name="scanStart">Starting address</param>
     /// <param name="scanSize">Size of region to scan</param>

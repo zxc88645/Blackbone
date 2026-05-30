@@ -84,7 +84,7 @@ bool PatternSearch::SearchWithHandler(
 
 /// <summary>
 /// Full pattern match, no wildcards.
-/// Uses Boyer–Moore–Horspool algorithm.
+/// Uses Boyerâ€“Mooreâ€“Horspool algorithm.
 /// </summary>
 /// <param name="scanStart">Starting address</param>
 /// <param name="scanSize">Size of region to scan</param>
@@ -299,7 +299,7 @@ size_t PatternSearch::Search(
 
 /// <summary>
 /// Full pattern match, no wildcards.
-/// Uses Boyer–Moore–Horspool algorithm.
+/// Uses Boyerâ€“Mooreâ€“Horspool algorithm.
 /// </summary>
 /// <param name="scanStart">Starting address</param>
 /// <param name="scanSize">Size of region to scan</param>
